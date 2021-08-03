@@ -110,7 +110,7 @@ then
     pkgar create toolchain/binutils-install --archive toolchain/binutils.pkgar --skey "${PKGAR_SKEY}"
 fi
 
-export PATH="${PWD}/toolchain/binutils-install:${PATH}"
+export PATH="${PWD}/toolchain/binutils-install/bin:${PATH}"
 
 ## GCC
 
@@ -173,7 +173,7 @@ then
     rm -rf toolchain/gcc-build.partial
     mkdir -p toolchain/gcc-build.partial
     pushd toolchain/gcc-build.partial
-        env PATH="${PWD}/toolchain/gcc-freestanding-install:${PATH}" \
+        env PATH="$(realpath ../gcc-freestanding-install)/bin:${PATH}" \
         ../gcc/configure \
             --target="x86_64-unknown-linux-relibc" \
             --program-prefix="x86_64-unknown-linux-relibc-" \
@@ -208,7 +208,7 @@ then
     pkgar create toolchain/gcc-install --archive toolchain/gcc.pkgar --skey "${PKGAR_SKEY}"
 fi
 
-export PATH="${PWD}/toolchain/gcc-install:${PATH}"
+export PATH="${PWD}/toolchain/gcc-install/bin:${PATH}"
 
 ## Packages
 
