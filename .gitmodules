@@ -1,0 +1,8 @@
+[submodule "pkgar"]
+	path = pkgar
+	url = https://gitlab.redox-os.org/redox-os/pkgar.git
+	branch = master
+[submodule "relibc"]
+	path = relibc
+	url = https://gitlab.redox-os.org/redox-os/relibc.git
+	branch = master
