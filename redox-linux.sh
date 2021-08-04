@@ -52,13 +52,11 @@ then
     make -C relibc sysroot
 fi
 
-RELIBC_SYSROOT="$(realpath relibc/sysroot)"
-
 mkdir -p toolchain
 
 if [ ! -f toolchain/relibc.pkgar ]
 then
-    pkgar create "${RELIBC_SYSROOT}" --archive toolchain/relibc.pkgar --skey "${PKGAR_SKEY}"
+    pkgar create "relibc/sysroot" --archive toolchain/relibc.pkgar --skey "${PKGAR_SKEY}"
 fi
 
 ## Binutils
@@ -143,6 +141,7 @@ then
             --target="x86_64-unknown-linux-relibc" \
             --program-prefix="x86_64-unknown-linux-relibc-" \
             --prefix="" \
+            --disable-bootstrap \
             --disable-nls \
             --enable-languages=c,c++ \
             --without-headers
@@ -168,27 +167,44 @@ fi
 
 ### GCC Hosted
 
+if [ ! -d toolchain/gcc-build-sysroot ]
+then
+    rm -rf toolchain/gcc-build-sysroot.partial
+    mkdir -p toolchain/gcc-build-sysroot.partial
+    for pkg in binutils gcc-freestanding relibc
+    do
+        pkgar extract toolchain/gcc-build-sysroot.partial --archive "toolchain/${pkg}.pkgar" --pkey "${PKGAR_PKEY}"
+    done
+    mv toolchain/gcc-build-sysroot.partial toolchain/gcc-build-sysroot
+fi
+
+GCC_BUILD_SYSROOT="$(realpath toolchain/gcc-build-sysroot)"
+
 if [ ! -d toolchain/gcc-build ]
 then
     rm -rf toolchain/gcc-build.partial
     mkdir -p toolchain/gcc-build.partial
     pushd toolchain/gcc-build.partial
-        env PATH="$(realpath ../gcc-freestanding-install)/bin:${PATH}" \
+        env PATH="${GCC_BUILD_SYSROOT}/bin:${PATH}" \
         ../gcc/configure \
             --target="x86_64-unknown-linux-relibc" \
             --program-prefix="x86_64-unknown-linux-relibc-" \
             --prefix="" \
             --with-sysroot \
-            --with-build-sysroot="${RELIBC_SYSROOT}" \
+            --with-build-sysroot="${GCC_BUILD_SYSROOT}" \
             --with-native-system-header-dir="/include" \
+            --disable-bootstrap \
+            --disable-libgomp \
             --disable-multilib \
             --disable-nls \
             --disable-werror \
             --enable-languages=c,c++ \
             --enable-shared \
+            --enable-static \
             --enable-threads=posix \
             && \
-        make -j "$(nproc)" all-gcc all-target-libgcc all-target-libstdc++-v3
+        make -j "$(nproc)" all-gcc all-target-libgcc
+        #all-target-libstdc++-v3
     popd
     mv toolchain/gcc-build.partial toolchain/gcc-build
 fi
@@ -198,7 +214,9 @@ then
     rm -rf toolchain/gcc-install.partial
     mkdir -p toolchain/gcc-install.partial
     pushd toolchain/gcc-build
-        make -j "$(nproc)" install-gcc install-target-libgcc install-target-libstdc++-v3 DESTDIR="$(realpath ../gcc-install.partial)"
+        env PATH="${GCC_BUILD_SYSROOT}/bin:${PATH}" \
+        make -j "$(nproc)" DESTDIR="$(realpath ../gcc-install.partial)" install-gcc install-target-libgcc
+        #install-target-libstdc++-v3
     popd
     mv toolchain/gcc-install.partial toolchain/gcc-install
 fi
@@ -208,13 +226,24 @@ then
     pkgar create toolchain/gcc-install --archive toolchain/gcc.pkgar --skey "${PKGAR_SKEY}"
 fi
 
-export PATH="${PWD}/toolchain/gcc-install/bin:${PATH}"
+if [ ! -d toolchain/sysroot ]
+then
+    rm -rf toolchain/sysroot.partial
+    mkdir -p toolchain/sysroot.partial
+    for pkg in binutils gcc relibc
+    do
+        pkgar extract toolchain/sysroot.partial --archive "toolchain/${pkg}.pkgar" --pkey "${PKGAR_PKEY}"
+    done
+    mv toolchain/sysroot.partial toolchain/sysroot
+fi
+
+export PATH="${PWD}/toolchain/sysroot/bin:${PATH}"
 
 ## Packages
 
 mkdir -p pkg
 
-function musl-cargo-install {
+function cargo-install {
     docker run --rm -it -v "${PWD}":/home/rust/src ekidd/rust-musl-builder \
     cargo install "$@"
 }
@@ -227,7 +256,7 @@ function pkgar-cargo-install {
     then
         rm -rf "pkg/${name}.partial"
         mkdir -p "pkg/${name}.partial"
-        musl-cargo-install --root "pkg/${name}.partial" "$@"
+        cargo-install --root "pkg/${name}.partial" "$@"
         pkgar create "pkg/${name}.partial" --archive "pkg/${name}.pkgar.partial" --skey "${PKGAR_SKEY}"
         rm -rf "pkg/${name}.partial"
         mv "pkg/${name}.pkgar.partial" "pkg/${name}.pkgar"
